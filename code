@@ -1,0 +1,140 @@
+#include <Servo.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+Servo servo;
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// ===== SENSOR =====
+const int trigLuar = 3;
+const int echoLuar = 5;
+
+const int trigDalam = 7;
+const int echoDalam = 8;
+
+// ===== OUTPUT =====
+const int ledHijau = 11;
+const int ledMerah = 10;
+const int buzzer = 6;
+
+// ===== VARIABEL =====
+bool statusBuka = false;
+bool sampahMasuk = false;
+unsigned long waktuBuka = 0;
+
+void setup() {
+  servo.attach(9);
+
+  pinMode(trigLuar, OUTPUT);
+  pinMode(echoLuar, INPUT);
+
+  pinMode(trigDalam, OUTPUT);
+  pinMode(echoDalam, INPUT);
+
+  pinMode(ledHijau, OUTPUT);
+  pinMode(ledMerah, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+
+  lcd.init();
+  lcd.backlight();
+
+  servo.write(0);
+  digitalWrite(ledMerah, HIGH);
+
+  lcdNormal();
+
+  Serial.begin(9600);
+}
+
+void loop() {
+  int jarakLuar = bacaSensor(trigLuar, echoLuar);
+
+  // === SENSOR LUAR DETEKSI ===
+  if (jarakLuar > 0 && jarakLuar <= 10) {
+    if (!statusBuka) {
+      buka();
+      waktuBuka = millis();
+      sampahMasuk = false;
+    }
+  }
+
+  // === CEK SENSOR DALAM ===
+  if (statusBuka) {
+    int jarakDalam = bacaSensor(trigDalam, echoDalam);
+
+    if (jarakDalam > 0 && jarakDalam <= 8) {
+      sampahMasuk = true;
+      lcdNormal();
+    }
+
+    // === JIKA 10 DETIK TIDAK ADA SAMPAH ===
+    if (millis() - waktuBuka >= 10000 && !sampahMasuk) {
+      alarmKeras();
+    }
+  }
+
+  // === TUTUP KEMBALI ===
+  if (statusBuka && jarakLuar > 15) {
+    tutup();
+  }
+
+  delay(100);
+}
+
+// ================= SENSOR =================
+int bacaSensor(int trig, int echo) {
+  digitalWrite(trig, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trig, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trig, LOW);
+
+  long durasi = pulseIn(echo, HIGH, 30000);
+  if (durasi == 0) return -1;
+
+  return durasi * 0.034 / 2;
+}
+
+// ================= AKSI =================
+void buka() {
+  servo.write(90);
+  digitalWrite(ledHijau, HIGH);
+  digitalWrite(ledMerah, LOW);
+  statusBuka = true;
+}
+
+void tutup() {
+  servo.write(0);
+  digitalWrite(ledHijau, LOW);
+  digitalWrite(ledMerah, HIGH);
+  statusBuka = false;
+  noTone(buzzer);
+  lcdNormal();
+}
+
+void alarmKeras() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("JANGAN BUANG");
+  lcd.setCursor(0, 1);
+  lcd.print("SAMPAH SEMBAR!");
+
+  digitalWrite(ledMerah, HIGH);
+  digitalWrite(ledHijau, LOW);
+
+  // Buzzer super keras
+  for (int i = 0; i < 5; i++) {
+    tone(buzzer, 3000);
+    delay(300);
+    noTone(buzzer);
+    delay(100);
+  }
+}
+
+void lcdNormal() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Mari menjaga");
+  lcd.setCursor(0, 1);
+  lcd.print("lingkungan ini");
+}
